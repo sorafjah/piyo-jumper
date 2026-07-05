@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>はねひこうき グライダー</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; touch-action:none; background:#87c8f0;
+    font-family:"BIZ UDPGothic","Hiragino Maru Gothic ProN",sans-serif; user-select:none; -webkit-user-select:none; }
+  canvas { display:block; }
+  #ui { position:fixed; inset:0; pointer-events:none; }
+
+  /* HUD */
+  #hud { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:14px;
+    color:#fff; text-shadow:0 2px 4px rgba(0,60,110,.5); font-weight:bold; line-height:1.5; font-size:16px; }
+  #stageLabel { position:absolute; top:calc(10px + env(safe-area-inset-top)); right:70px;
+    color:#fff; text-shadow:0 2px 4px rgba(0,60,110,.5); font-weight:bold; font-size:16px; text-align:right; }
+  #restartBtn { position:absolute; top:calc(8px + env(safe-area-inset-top)); right:12px;
+    width:48px; height:48px; border-radius:50%; border:none; background:rgba(255,255,255,.85);
+    font-size:24px; color:#2b6fb0; pointer-events:auto; box-shadow:0 2px 6px rgba(0,40,80,.3); }
+
+  /* センターメッセージ */
+  #msg { position:absolute; top:26%; left:0; right:0; text-align:center; color:#fff;
+    font-weight:bold; text-shadow:0 3px 8px rgba(0,50,100,.55); padding:0 20px; }
+  #msgMain { font-size:clamp(26px,6vw,44px); }
+  #msgSub  { font-size:clamp(15px,3.4vw,22px); margin-top:10px; }
+
+  /* F1風シグナル */
+  #lights { position:absolute; top:18%; left:50%; transform:translateX(-50%);
+    display:none; gap:18px; padding:16px 24px; background:rgba(20,30,45,.85); border-radius:20px; }
+  .light { width:56px; height:56px; border-radius:50%; background:#2a3648; transition:background .12s, box-shadow .12s; }
+  .light.red    { background:#ff4040; box-shadow:0 0 24px #ff4040; }
+  .light.yellow { background:#ffd340; box-shadow:0 0 24px #ffd340; }
+  .light.green  { background:#39e070; box-shadow:0 0 28px #39e070; }
+  #goText { position:absolute; top:34%; left:0; right:0; text-align:center; display:none;
+    font-size:clamp(48px,12vw,90px); font-weight:bold; color:#39e070;
+    text-shadow:0 4px 12px rgba(0,80,30,.6); }
+
+  /* 仮想スティック */
+  #stickZone { position:absolute; left:26px; bottom:calc(26px + env(safe-area-inset-bottom));
+    width:150px; height:150px; border-radius:50%; background:rgba(255,255,255,.18);
+    border:3px solid rgba(255,255,255,.5); pointer-events:auto; }
+  #stickNub { position:absolute; left:50%; top:50%; width:64px; height:64px; border-radius:50%;
+    background:rgba(255,255,255,.85); box-shadow:0 3px 8px rgba(0,40,80,.35);
+    transform:translate(-50%,-50%); }
+  #stickHint { position:absolute; width:100%; text-align:center; top:-26px; color:#fff;
+    font-size:13px; font-weight:bold; text-shadow:0 1px 3px rgba(0,50,100,.5); }
+
+  /* ブレーキ */
+  #brakeBtn { position:absolute; right:26px; bottom:calc(34px + env(safe-area-inset-bottom));
+    width:118px; height:118px; border-radius:50%; pointer-events:auto;
+    background:rgba(255,120,90,.88); border:4px solid rgba(255,255,255,.7);
+    color:#fff; font-size:20px; font-weight:bold; font-family:inherit;
+    box-shadow:0 4px 10px rgba(120,30,10,.35); }
+  #brakeBtn.on { background:rgba(220,60,30,1); transform:scale(.94); }
+
+  /* パネル(スコア・結果・タイトル) */
+  .panel { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background:rgba(255,255,255,.96); border-radius:26px; padding:28px 34px; text-align:center;
+    box-shadow:0 10px 40px rgba(0,50,100,.35); pointer-events:auto; display:none; min-width:290px; max-width:86vw; }
+  .panel h1 { font-size:clamp(24px,5.6vw,36px); color:#e04030; margin-bottom:8px; }
+  .panel h2 { font-size:clamp(20px,5vw,30px); color:#2b6fb0; margin-bottom:6px; }
+  .panel .big { font-size:clamp(40px,10vw,64px); font-weight:bold; color:#e08820; }
+  .panel p { font-size:16px; color:#445; margin:8px 0; line-height:1.7; }
+  .panel button { margin-top:14px; padding:16px 34px; font-size:20px; font-weight:bold;
+    border:none; border-radius:999px; background:#2b9fe0; color:#fff; font-family:inherit;
+    box-shadow:0 4px 0 #1c78ad; min-width:200px; min-height:56px; }
+  .panel button:active { transform:translateY(3px); box-shadow:0 1px 0 #1c78ad; }
+  #titlePlane { font-size:64px; }
+
+  #errBox { position:fixed; left:8px; bottom:8px; right:8px; display:none; background:rgba(180,30,30,.92);
+    color:#fff; font-size:12px; padding:8px 10px; border-radius:8px; z-index:99; pointer-events:none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="ui">
+  <div id="hud"></div>
+  <div id="stageLabel"></div>
+  <button id="restartBtn">↺</button>
+  <div id="msg"><div id="msgMain"></div><div id="msgSub"></div></div>
+  <div id="lights"><div class="light" id="l1"></div><div class="light" id="l2"></div><div class="light" id="l3"></div></div>
+  <div id="goText">GO!</div>
+  <div id="stickZone"><div id="stickHint">そうさ</div><div id="stickNub"></div></div>
+  <button id="brakeBtn">ブレーキ</button>
+
+  <div class="panel" id="titlePanel">
+    <div id="titlePlane">🛩️</div>
+    <h1>はねひこうき グライダー</h1>
+    <p>ジャンプだいから とびだして<br>まとの ちゅうしんに ちゃくちしよう!</p>
+    <p style="font-size:14px;color:#778">スティック: きたい そうさ / ブレーキ: げんそく<br>(キーボード: やじるしキー + スペース)</p>
+    <button id="startBtn">タップして スタート</button>
+  </div>
+
+  <div class="panel" id="scorePanel">
+    <h2 id="scoreStage"></h2>
+    <p id="scoreDist"></p>
+    <div class="big" id="scorePts"></div>
+    <p id="scoreMsg"></p>
+    <button id="nextBtn"></button>
+  </div>
+
+  <div class="panel" id="resultPanel">
+    <h1>けっか はっぴょう</h1>
+    <p id="resultDetail"></p>
+    <div class="big" id="resultTotal"></div>
+    <p id="resultStars" style="font-size:34px"></p>
+    <button id="againBtn">もういちど あそぶ</button>
+  </div>
+</div>
+<div id="errBox"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
+
+window.addEventListener('error', e => {
+  const b = document.getElementById('errBox');
+  b.style.display = 'block';
+  b.textContent = 'エラー: ' + e.message + ' (' + (e.lineno||'') + ')';
+});
+
+// ============================================================
+//  基本セットアップ
+// ============================================================
+const SKY = 0x87c8f0;
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(SKY);
+scene.fog = new THREE.Fog(SKY, 220, 900);
+
+const camera = new THREE.PerspectiveCamera(62, window.innerWidth/window.innerHeight, 0.1, 2200);
+camera.position.set(0, 105, 200);
+
+scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x7a9b55, 1.05));
+const sun = new THREE.DirectionalLight(0xfff2d8, 1.15);
+sun.position.set(80, 160, 60);
+scene.add(sun);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ============================================================
+//  地形・環境
+// ============================================================
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(4000, 4000),
+  new THREE.MeshLambertMaterial({ color:0x7ec850 })
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+// 草むらパッチ(移動感のための模様)
+{
+  const patchGeo = new THREE.CircleGeometry(1, 10);
+  const patchMat = new THREE.MeshLambertMaterial({ color:0x6db844 });
+  for (let i=0;i<130;i++){
+    const m = new THREE.Mesh(patchGeo, patchMat);
+    const r = 4 + Math.random()*16;
+    m.scale.set(r, r*(0.5+Math.random()*0.5), 1);
+    m.rotation.x = -Math.PI/2; m.rotation.z = Math.random()*Math.PI;
+    m.position.set((Math.random()-0.5)*900, 0.02, 60 - Math.random()*750);
+    scene.add(m);
+  }
+}
+
+// 山(ローポリ、雪帽子つき)
+function addMountain(x, z, h, col){
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.ConeGeometry(h*0.75, h, 6), new THREE.MeshLambertMaterial({ color:col, flatShading:true }));
+  body.position.y = h/2;
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(h*0.28, h*0.34, 6), new THREE.MeshLambertMaterial({ color:0xffffff, flatShading:true }));
+  cap.position.y = h - h*0.34/2 + 0.5;
+  g.add(body, cap);
+  g.position.set(x, 0, z);
+  g.rotation.y = Math.random()*Math.PI;
+  scene.add(g);
+}
+for (let i=0;i<16;i++){
+  const a = Math.PI*2*i/16 + Math.random()*0.3;
+  addMountain(Math.cos(a)*(850+Math.random()*250), Math.sin(a)*(850+Math.random()*250),
+    130+Math.random()*140, i%2 ? 0x5f9e6e : 0x6fae7a);
+}
+addMountain(-230, -180, 90, 0x6fae7a);
+addMountain(260, -420, 110, 0x5f9e6e);
+addMountain(-280, -520, 100, 0x6fae7a);
+
+// 木
+function addTree(x, z){
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,3,6), new THREE.MeshLambertMaterial({ color:0x8a5a30 }));
+  trunk.position.y = 1.5;
+  const leaf = new THREE.Mesh(new THREE.ConeGeometry(2.6,6,7), new THREE.MeshLambertMaterial({ color:0x3f9445, flatShading:true }));
+  leaf.position.y = 6;
+  g.add(trunk, leaf);
+  g.position.set(x, 0, z);
+  const s = 0.8 + Math.random()*0.8; g.scale.setScalar(s);
+  scene.add(g);
+}
+const TARGET_POS = new THREE.Vector3(0, 0, -310);
+for (let i=0;i<60;i++){
+  const x = (Math.random()-0.5)*700;
+  const z = 50 - Math.random()*680;
+  if (Math.hypot(x-TARGET_POS.x, z-TARGET_POS.z) < 55) continue;
+  addTree(x, z);
+}
+
+// 雲
+const clouds = [];
+{
+  const cmat = new THREE.MeshLambertMaterial({ color:0xffffff });
+  for (let i=0;i<16;i++){
+    const g = new THREE.Group();
+    const n = 3 + Math.floor(Math.random()*3);
+    for (let j=0;j<n;j++){
+      const s = 6 + Math.random()*8;
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(s, 7, 6), cmat);
+      puff.position.set((j-n/2)*s*0.9, (Math.random()-0.5)*3, (Math.random()-0.5)*5);
+      puff.scale.y = 0.6;
+      g.add(puff);
+    }
+    g.position.set((Math.random()-0.5)*700, 45+Math.random()*110, 120 - Math.random()*800);
+    scene.add(g);
+    clouds.push(g);
+  }
+}
+
+// ============================================================
+//  的(カーリング風の同心円)
+// ============================================================
+function makeTargetTexture(){
+  const c = document.createElement('canvas'); c.width = c.height = 1024;
+  const x = c.getContext('2d');
+  const R = 512; // 半径512px = ワールド28m
+  const px = m => m/28*R;
+  function ring(r, col){ x.fillStyle = col; x.beginPath(); x.arc(R,R,px(r),0,Math.PI*2); x.fill(); }
+  x.clearRect(0,0,1024,1024);
+  ring(28, '#3b6fd4'); // 青(外)
+  ring(20, '#f3f5f8'); // 白
+  ring(14, '#e04434'); // 赤
+  ring(6,  '#f3f5f8'); // 白(ボタン)
+  ring(2,  '#e04434'); // 中心点
+  // 外周線
+  x.strokeStyle = '#2a55a8'; x.lineWidth = 8;
+  x.beginPath(); x.arc(R,R,px(28)-4,0,Math.PI*2); x.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+{
+  const target = new THREE.Mesh(
+    new THREE.CircleGeometry(28, 64),
+    new THREE.MeshLambertMaterial({ map:makeTargetTexture(), transparent:true })
+  );
+  target.rotation.x = -Math.PI/2;
+  target.position.set(TARGET_POS.x, 0.06, TARGET_POS.z);
+  scene.add(target);
+}
+// 的の脇の旗(遠くから見つけやすく)
+function addFlag(x, z, col){
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,9,6), new THREE.MeshLambertMaterial({ color:0xeeeeee }));
+  pole.position.y = 4.5;
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(3.2,2), new THREE.MeshLambertMaterial({ color:col, side:THREE.DoubleSide }));
+  flag.position.set(1.6, 8, 0);
+  g.add(pole, flag);
+  g.position.set(x, 0, z);
+  scene.add(g);
+  return flag;
+}
+const flagMeshes = [
+  addFlag(TARGET_POS.x-34, TARGET_POS.z, 0xff5040),
+  addFlag(TARGET_POS.x+34, TARGET_POS.z, 0xff5040),
+];
+
+// 着地マーカー(旗)
+const landMarker = new THREE.Group();
+{
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,4,6), new THREE.MeshLambertMaterial({ color:0x333333 }));
+  pole.position.y = 2;
+  const tri = new THREE.Mesh(new THREE.PlaneGeometry(1.8,1.1), new THREE.MeshLambertMaterial({ color:0xffd020, side:THREE.DoubleSide }));
+  tri.position.set(0.9, 3.4, 0);
+  landMarker.add(pole, tri);
+  landMarker.visible = false;
+  scene.add(landMarker);
+}
+
+// ============================================================
+//  ジャンプ台(スキージャンプ風)
+// ============================================================
+const rampCurve = new THREE.QuadraticBezierCurve3(
+  new THREE.Vector3(0, 96, 140),
+  new THREE.Vector3(0, 38, 44),
+  new THREE.Vector3(0, 34, -18)
+);
+const rampLen = rampCurve.getLength();
+
+function makeDeckTexture(){
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = '#e8f1fb'; x.fillRect(0,0,64,64);
+  x.fillStyle = '#bcd6ef'; x.fillRect(0,0,64,7);
+  x.fillStyle = '#ffffff'; x.fillRect(0,30,64,4);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+{
+  const seg = 56, w = 7;
+  const pos = [], uv = [], idx = [];
+  for (let i=0;i<=seg;i++){
+    const u = i/seg;
+    const p = rampCurve.getPointAt(u);
+    pos.push(p.x-w/2, p.y, p.z,  p.x+w/2, p.y, p.z);
+    uv.push(0, u*24,  1, u*24);
+  }
+  for (let i=0;i<seg;i++){
+    const a = i*2;
+    idx.push(a, a+1, a+2,  a+1, a+3, a+2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv,2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const deck = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map:makeDeckTexture(), side:THREE.DoubleSide }));
+  scene.add(deck);
+
+  // レール
+  const railMat = new THREE.MeshLambertMaterial({ color:0xe05540 });
+  for (const side of [-1,1]){
+    const pts = [];
+    for (let i=0;i<=24;i++){
+      const p = rampCurve.getPointAt(i/24);
+      pts.push(new THREE.Vector3(p.x + side*w/2, p.y+0.7, p.z));
+    }
+    const rail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.26, 6), railMat);
+    scene.add(rail);
+  }
+  // 支柱
+  const pillarMat = new THREE.MeshLambertMaterial({ color:0x9a7048 });
+  for (let i=0;i<=8;i++){
+    const p = rampCurve.getPointAt(i/8);
+    for (const side of [-1,1]){
+      const h = p.y;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(1, h, 1), pillarMat);
+      box.position.set(p.x + side*(w/2-0.6), h/2, p.z);
+      scene.add(box);
+    }
+  }
+  // スタート台
+  const plat = new THREE.Mesh(new THREE.BoxGeometry(12, 2.5, 10), new THREE.MeshLambertMaterial({ color:0xf0f6fc }));
+  const p0 = rampCurve.getPointAt(0);
+  plat.position.set(p0.x, p0.y-0.4, p0.z+5);
+  scene.add(plat);
+}
+
+// ============================================================
+//  自機:赤いかわいい羽根つき飛行機(機首は -Z 方向)
+// ============================================================
+const plane = new THREE.Group();
+{
+  const red   = new THREE.MeshLambertMaterial({ color:0xe8402a });
+  const dark  = new THREE.MeshLambertMaterial({ color:0xc22e1c });
+  const white = new THREE.MeshLambertMaterial({ color:0xfff8f0 });
+  const yellow= new THREE.MeshLambertMaterial({ color:0xffc830 });
+  const black = new THREE.MeshLambertMaterial({ color:0x222222 });
+  const pink  = new THREE.MeshLambertMaterial({ color:0xff9aa0 });
+
+  // 胴体(まるっと)
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), red);
+  body.scale.set(1, 0.95, 2.1);
+  plane.add(body);
+
+  // くちばし風ノーズ
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.9, 10), yellow);
+  nose.rotation.x = -Math.PI/2;
+  nose.position.set(0, -0.1, -2.2);
+  plane.add(nose);
+
+  // 目
+  for (const s of [-1,1]){
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), white);
+    eye.position.set(s*0.42, 0.42, -1.35);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), black);
+    pupil.position.set(s*0.46, 0.46, -1.62);
+    const cheek = new THREE.Mesh(new THREE.CircleGeometry(0.16, 8), pink);
+    cheek.position.set(s*0.72, 0.05, -1.65);
+    cheek.lookAt(cheek.position.clone().add(new THREE.Vector3(s*0.5, 0.1, -1)));
+    plane.add(eye, pupil, cheek);
+  }
+
+  // 羽(はねの生えた翼:白いフェザー3枚 + 赤いつけ根)
+  for (const s of [-1,1]){
+    const wing = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.18, 1.3), dark);
+    base.position.x = s*0.9;
+    wing.add(base);
+    for (let f=0; f<3; f++){
+      const feather = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), white);
+      feather.scale.set(1.7 - f*0.28, 0.16, 0.42);
+      feather.position.set(s*(1.7 + f*0.12), 0.02 + f*0.02, -0.55 + f*0.55);
+      feather.rotation.y = s * (-0.12 + f*0.12);
+      wing.add(feather);
+    }
+    wing.position.set(0, 0.15, 0);
+    plane.add(wing);
+  }
+
+  // 尾翼
+  const vtail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.9, 0.8), red);
+  vtail.position.set(0, 0.75, 1.75);
+  const htail = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.6), white);
+  htail.position.set(0, 0.35, 1.8);
+  plane.add(vtail, htail);
+
+  // おなか
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.95, 14, 10), white);
+  belly.scale.set(0.9, 0.7, 1.7);
+  belly.position.y = -0.35;
+  plane.add(belly);
+}
+plane.rotation.order = 'YXZ';
+scene.add(plane);
+
+// 丸影(高度が分かる)
+const blobShadow = new THREE.Mesh(
+  new THREE.CircleGeometry(1.6, 20),
+  new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.3 })
+);
+blobShadow.rotation.x = -Math.PI/2;
+scene.add(blobShadow);
+
+// 翼端トレイル
+function makeTrail(n){
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3), 3));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:0.45 }));
+  line.frustumCulled = false;
+  scene.add(line);
+  return { pts:[], n, geo, line,
+    push(p){ this.pts.push(p.clone()); if (this.pts.length > this.n) this.pts.shift();
+      const a = this.geo.attributes.position;
+      for (let i=0;i<this.pts.length;i++) a.setXYZ(i, this.pts[i].x, this.pts[i].y, this.pts[i].z);
+      this.geo.setDrawRange(0, this.pts.length); a.needsUpdate = true; },
+    reset(){ this.pts.length = 0; this.geo.setDrawRange(0,0); } };
+}
+const trailL = makeTrail(46), trailR = makeTrail(46);
+
+// スピードライン(風切り演出)
+const speedLines = [];
+const speedLineMat = new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0 });
+for (let i=0;i<34;i++){
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 5.5), speedLineMat);
+  m.visible = false; m.frustumCulled = false;
+  scene.add(m); speedLines.push(m);
+}
+function respawnSpeedLine(m, dir){
+  const side = new THREE.Vector3(-dir.z, 0, dir.x);
+  if (side.lengthSq() < 0.001) side.set(1, 0, 0);
+  side.normalize();
+  const up = new THREE.Vector3().crossVectors(dir, side).normalize();
+  const ang = Math.random()*Math.PI*2, rad = 5 + Math.random()*11;
+  m.position.copy(plane.position)
+    .addScaledVector(dir, 12 + Math.random()*35)
+    .addScaledVector(side, Math.cos(ang)*rad)
+    .addScaledVector(up, Math.sin(ang)*rad);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+}
+
+// 花吹雪パーティクル
+const petals = [];
+{
+  const cols = [0xffb7c5, 0xffd0dc, 0xfff0f4, 0xff9db2];
+  for (let i=0;i<110;i++){
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.55, 0.4),
+      new THREE.MeshBasicMaterial({ color:cols[i%cols.length], side:THREE.DoubleSide, transparent:true, opacity:0.95 })
+    );
+    m.visible = false;
+    m.userData = { rx:(Math.random()-0.5)*6, ry:(Math.random()-0.5)*6, ph:Math.random()*10 };
+    scene.add(m); petals.push(m);
+  }
+}
+function scatterPetals(center, radius){
+  for (const p of petals){
+    p.position.set(
+      center.x + (Math.random()-0.5)*radius*2,
+      center.y + Math.random()*radius,
+      center.z + (Math.random()-0.5)*radius*2
+    );
+  }
+}
+
+// 土ぼこり(バウンド時)
+const dusts = [];
+{
+  const dmat = new THREE.MeshBasicMaterial({ color:0xd8c9a8, transparent:true });
+  for (let i=0;i<22;i++){
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1,1), dmat.clone());
+    m.visible = false;
+    m.userData = { v:new THREE.Vector3(), life:0 };
+    scene.add(m); dusts.push(m);
+  }
+}
+function burstDust(pos, power){
+  let n = 0;
+  for (const d of dusts){
+    if (n >= 12) break;
+    d.visible = true;
+    d.position.copy(pos); d.position.y = 0.4;
+    d.userData.v.set((Math.random()-0.5)*8, 2+Math.random()*power, (Math.random()-0.5)*8);
+    d.userData.life = 0.9;
+    d.scale.setScalar(0.8+Math.random());
+    d.material.opacity = 0.8;
+    n++;
+  }
+}
+
+// ============================================================
+//  cannon-es 物理(着地バウンド用)
+// ============================================================
+const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+const matGround = new CANNON.Material('ground');
+const matPlane  = new CANNON.Material('plane');
+world.addContactMaterial(new CANNON.ContactMaterial(matGround, matPlane, {
+  restitution: 0.48, friction: 0.35
+}));
+const groundBody = new CANNON.Body({ mass:0, material:matGround, shape:new CANNON.Plane() });
+groundBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
+world.addBody(groundBody);
+
+let planeBody = null; // 着地フェーズでのみ生成
+function createLandingBody(pos, vel){
+  if (planeBody) world.removeBody(planeBody);
+  planeBody = new CANNON.Body({
+    mass: 1, material: matPlane,
+    shape: new CANNON.Sphere(0.95),
+    position: new CANNON.Vec3(pos.x, Math.max(pos.y, 1.0), pos.z),
+    velocity: new CANNON.Vec3(vel.x, vel.y, vel.z),
+    linearDamping: 0.32, angularDamping: 0.95
+  });
+  planeBody.addEventListener('collide', (e) => {
+    const iv = Math.abs(e.contact.getImpactVelocityAlongNormal());
+    if (iv > 2.5){
+      burstDust(plane.position, Math.min(iv*0.6, 8));
+      sfxBounce(Math.min(iv/18, 1));
+      camShake = Math.min(iv*0.03, 0.5);
+    }
+  });
+  world.addBody(planeBody);
+}
+
+// ============================================================
+//  サウンド(Web Audio API)
+// ============================================================
+let AC = null, masterGain = null, windGain = null, windFilter = null, bgmGain = null;
+let bgmTimer = null, bgmNextTime = 0, bgmStep = 0;
+
+function initAudio(){
+  if (AC) { AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = AC.createGain(); masterGain.gain.value = 0.55;
+    masterGain.connect(AC.destination);
+
+    // 風切り音(ノイズループ)
+    const len = AC.sampleRate * 2;
+    const buf = AC.createBuffer(1, len, AC.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i=0;i<len;i++) d[i] = Math.random()*2-1;
+    const src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
+    windFilter = AC.createBiquadFilter(); windFilter.type = 'lowpass'; windFilter.frequency.value = 300;
+    windGain = AC.createGain(); windGain.gain.value = 0;
+    src.connect(windFilter).connect(windGain).connect(masterGain);
+    src.start();
+
+    // BGM
+    bgmGain = AC.createGain(); bgmGain.gain.value = 0.20;
+    bgmGain.connect(masterGain);
+    bgmNextTime = AC.currentTime + 0.1; bgmStep = 0;
+    bgmTimer = setInterval(scheduleBGM, 180);
+  } catch(e){ /* 音なしでも続行 */ }
+}
+
+function tone(freq, dur, type, vol, when, slideTo){
+  if (!AC) return;
+  const t0 = AC.currentTime + (when||0);
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq, t0);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0+dur);
+  g.gain.setValueAtTime(vol||0.2, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0+dur);
+  o.connect(g).connect(masterGain);
+  o.start(t0); o.stop(t0+dur+0.05);
+}
+function noiseBurst(dur, filterFreq, vol, filterType){
+  if (!AC) return;
+  const len = Math.floor(AC.sampleRate*dur);
+  const buf = AC.createBuffer(1, len, AC.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * (1-i/len);
+  const src = AC.createBufferSource(); src.buffer = buf;
+  const f = AC.createBiquadFilter(); f.type = filterType||'lowpass'; f.frequency.value = filterFreq;
+  const g = AC.createGain(); g.gain.value = vol;
+  src.connect(f).connect(g).connect(masterGain);
+  src.start();
+}
+
+// BGM: かるいペンタトニックの8分ループ(先読みスケジューラ)
+const BGM_MELO = [523.25,659.25,783.99,659.25, 880,783.99,659.25,587.33,
+                  523.25,587.33,659.25,783.99, 659.25,587.33,523.25,0];
+const BGM_BASS = [130.81,0,196,0, 220,0,174.61,0, 130.81,0,196,0, 174.61,0,196,0];
+function scheduleBGM(){
+  if (!AC || !bgmGain) return;
+  const stepDur = 60/116/2; // 8分音符
+  while (bgmNextTime < AC.currentTime + 0.45){
+    const i = bgmStep % 16;
+    const m = BGM_MELO[i], b = BGM_BASS[i];
+    if (m){
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = 'triangle'; o.frequency.value = m;
+      g.gain.setValueAtTime(0.16, bgmNextTime);
+      g.gain.exponentialRampToValueAtTime(0.001, bgmNextTime + stepDur*0.9);
+      o.connect(g).connect(bgmGain); o.start(bgmNextTime); o.stop(bgmNextTime + stepDur);
+    }
+    if (b){
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = 'square'; o.frequency.value = b;
+      g.gain.setValueAtTime(0.07, bgmNextTime);
+      g.gain.exponentialRampToValueAtTime(0.001, bgmNextTime + stepDur*1.6);
+      o.connect(g).connect(bgmGain); o.start(bgmNextTime); o.stop(bgmNextTime + stepDur*1.8);
+    }
+    bgmNextTime += stepDur;
+    bgmStep++;
+  }
+}
+
+const sfxSignal = high => tone(high?880:440, high?0.5:0.22, 'square', 0.22);
+const sfxWhoosh = () => noiseBurst(0.8, 2500, 0.5, 'bandpass');
+const sfxThud   = () => { noiseBurst(0.18, 220, 0.7); tone(95, 0.22, 'sine', 0.5, 0, 45); };
+const sfxBounce = p => { tone(240+p*160, 0.28, 'triangle', 0.35, 0, 70); };
+const sfxChime  = () => { tone(784,0.3,'sine',0.25); tone(1046.5,0.4,'sine',0.25,0.12); };
+function sfxScore(pts){
+  const seq = [523.25, 659.25, 783.99, 1046.5];
+  seq.forEach((f,i)=>tone(f, 0.28, 'square', 0.2, i*0.13));
+  if (pts >= 100){ tone(1318.5, 0.5, 'square', 0.22, 0.55); tone(1568, 0.7, 'square', 0.22, 0.7); }
+}
+
+function speak(text){
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP'; u.rate = 0.95;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch(e){}
+}
+
+// ============================================================
+//  入力(仮想スティック + ブレーキ + キーボード)
+// ============================================================
+const stick = { x:0, y:0, id:null };
+const keys = {};
+let braking = false, brakePointerId = null;
+
+const stickZone = document.getElementById('stickZone');
+const stickNub  = document.getElementById('stickNub');
+const brakeBtn  = document.getElementById('brakeBtn');
+
+function stickUpdate(cx, cy){
+  const r = stickZone.getBoundingClientRect();
+  const dx = cx - (r.left + r.width/2), dy = cy - (r.top + r.height/2);
+  const max = r.width/2 - 20;
+  const len = Math.hypot(dx, dy) || 1;
+  const cl = Math.min(len, max);
+  const nx = dx/len*cl, ny = dy/len*cl;
+  stick.x =  nx/max;
+  stick.y = -ny/max; // 画面上=機首上げ
+  stickNub.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+}
+function stickReset(){
+  stick.x = 0; stick.y = 0; stick.id = null;
+  stickNub.style.transform = 'translate(-50%,-50%)';
+}
+stickZone.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  stick.id = e.pointerId;
+  stickUpdate(e.clientX, e.clientY);
+});
+window.addEventListener('pointermove', e => {
+  if (e.pointerId === stick.id) stickUpdate(e.clientX, e.clientY);
+});
+window.addEventListener('pointerup', e => {
+  if (e.pointerId === stick.id) stickReset();
+  if (e.pointerId === brakePointerId){ braking = false; brakePointerId = null; brakeBtn.classList.remove('on'); }
+});
+window.addEventListener('pointercancel', e => {
+  if (e.pointerId === stick.id) stickReset();
+  if (e.pointerId === brakePointerId){ braking = false; brakePointerId = null; brakeBtn.classList.remove('on'); }
+});
+brakeBtn.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  braking = true; brakePointerId = e.pointerId;
+  brakeBtn.classList.add('on');
+});
+window.addEventListener('keydown', e => { keys[e.key] = true; if (e.key===' ') e.preventDefault(); });
+window.addEventListener('keyup',   e => { keys[e.key] = false; });
+
+function getControl(){
+  let x = stick.x, y = stick.y;
+  if (keys['ArrowLeft']  || keys['a']) x = -1;
+  if (keys['ArrowRight'] || keys['d']) x =  1;
+  if (keys['ArrowUp']    || keys['w']) y =  1;
+  if (keys['ArrowDown']  || keys['s']) y = -1;
+  const brk = braking || keys[' '];
+  return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), brk };
+}
+
+// ============================================================
+//  ゲーム状態
+// ============================================================
+const WINDS = {
+  right: { v:new THREE.Vector3(-1,0,0), jp:'みぎ' },
+  left:  { v:new THREE.Vector3( 1,0,0), jp:'ひだり' },
+  front: { v:new THREE.Vector3( 0,0,1), jp:'まえ' },
+  back:  { v:new THREE.Vector3( 0,0,-1), jp:'うしろ' },
+};
+const WIND_SPEED = 6.5;
+const STALL = 13;
+
+let state = 'title';   // title / intro / lights / slide / fly / landed / score / result
+let currentStage = 0;
+let stageWind = null;  // WINDSのエントリ or null
+const stageScores = [0, 0];
+
+// 飛行パラメータ
+let yaw = 0, pitch = 0, bank = 0, speed = 0;
+let lastVel = new THREE.Vector3();
+let slideS = 0, slideV = 0;
+let settleTimer = 0, landedTimer = 0;
+let camShake = 0, stateTimer = 0;
+let camFov = 62;
+
+// UI参照
+const $ = id => document.getElementById(id);
+const hud = $('hud'), stageLabel = $('stageLabel');
+const msgMain = $('msgMain'), msgSub = $('msgSub');
+const lightsEl = $('lights'), goText = $('goText');
+const lights = [$('l1'), $('l2'), $('l3')];
+
+function showMsg(a, b){ msgMain.textContent = a||''; msgSub.textContent = b||''; }
+function showPanel(id){
+  for (const p of ['titlePanel','scorePanel','resultPanel']) $(p).style.display = 'none';
+  if (id) $(id).style.display = 'block';
+}
+
+// ============================================================
+//  ステージ進行
+// ============================================================
+function startStage(i){
+  currentStage = i;
+  stageWind = (i === 1) ? WINDS[['right','left','front','back'][Math.floor(Math.random()*4)]] : null;
+
+  // リセット
+  if (planeBody){ world.removeBody(planeBody); planeBody = null; }
+  landMarker.visible = false;
+  trailL.reset(); trailR.reset();
+  for (const p of petals) p.visible = false;
+  for (const d of dusts) d.visible = false;
+  for (const s of speedLines) s.visible = false;
+  stickReset(); braking = false; brakeBtn.classList.remove('on');
+
+  const p0 = rampCurve.getPointAt(0);
+  plane.position.copy(p0).add(new THREE.Vector3(0, 1.1, 2));
+  const t0 = rampCurve.getTangentAt(0);
+  yaw = Math.atan2(-t0.x, -t0.z);
+  pitch = Math.asin(THREE.MathUtils.clamp(t0.y, -1, 1));
+  bank = 0; speed = 0; slideS = 0; slideV = 3;
+  applyPlaneTransform();
+
+  camera.position.copy(plane.position).add(new THREE.Vector3(0, 5, 14));
+  camera.lookAt(plane.position);
+  camFov = 62;
+
+  stageLabel.textContent = `ステージ ${i+1} / 2`;
+  showPanel(null);
+  lightsToken++; // 進行中のシグナル演出を無効化
+  goText.style.display = 'none';
+  lightsEl.style.display = 'none';
+
+  // イントロ
+  state = 'intro'; stateTimer = 0;
+  if (stageWind){
+    showMsg(`${stageWind.jp}から かぜが ふいています!`, 'かぜに ながされるよ。きをつけて!');
+    speak(`${stageWind.jp}から、かぜが、ふいています`);
+    sfxChime();
+    for (const p of petals) p.visible = true;
+    scatterPetals(plane.position, 30);
+  } else {
+    showMsg('ステージ 1', 'まとの ちゅうしんを ねらおう!');
+    sfxChime();
+  }
+}
+
+let lightsToken = 0;
+function startLights(){
+  state = 'lights'; stateTimer = 0;
+  showMsg('', '');
+  lightsEl.style.display = 'flex';
+  for (const l of lights) l.className = 'light';
+  const tk = ++lightsToken;
+  setTimeout(()=>{ if (tk!==lightsToken) return; lights[0].classList.add('red');    sfxSignal(false); }, 400);
+  setTimeout(()=>{ if (tk!==lightsToken) return; lights[1].classList.add('yellow'); sfxSignal(false); }, 1200);
+  setTimeout(()=>{
+    if (tk !== lightsToken) return;
+    lights[2].classList.add('green'); sfxSignal(true);
+    goText.style.display = 'block';
+    setTimeout(()=>{ if (tk!==lightsToken) return; lightsEl.style.display='none'; goText.style.display='none'; }, 800);
+    state = 'slide'; slideS = 0; slideV = 3;
+  }, 2000);
+}
+
+function launch(){
+  const t = rampCurve.getTangentAt(1);
+  yaw = Math.atan2(-t.x, -t.z);
+  pitch = Math.asin(THREE.MathUtils.clamp(t.y, -1, 1));
+  speed = slideV;
+  state = 'fly'; stateTimer = 0;
+  sfxWhoosh();
+}
+
+function beginLanding(){
+  state = 'landed'; landedTimer = 0; settleTimer = 0;
+  createLandingBody(plane.position, lastVel);
+  sfxThud();
+  burstDust(plane.position, 6);
+  camShake = 0.45;
+}
+
+function finishStage(){
+  state = 'score';
+  const d = Math.hypot(plane.position.x - TARGET_POS.x, plane.position.z - TARGET_POS.z);
+  let pts = 0, msg = 'まとの そと… つぎは ちゅうしんを ねらおう!';
+  const table = [[4,100,'ど真ん中!パーフェクト!!'],[9,80,'すごい!あとちょっとで まんてん!'],
+                 [14,60,'いいね!ナイス ちゃくち!'],[20,40,'おしい!まとには のった!'],[27,20,'まとに あたった!']];
+  for (const [r,p,m] of table){ if (d <= r){ pts = p; msg = m; break; } }
+  stageScores[currentStage] = pts;
+
+  landMarker.position.set(plane.position.x, 0, plane.position.z);
+  landMarker.visible = true;
+
+  $('scoreStage').textContent = `ステージ ${currentStage+1} けっか`;
+  $('scoreDist').textContent = `ちゅうしんから ${d.toFixed(1)} m`;
+  $('scorePts').textContent = `${pts} てん`;
+  $('scoreMsg').textContent = msg;
+  $('nextBtn').textContent = currentStage === 0 ? 'つぎの ステージへ →' : 'けっかを 見る';
+  showPanel('scorePanel');
+  sfxScore(pts);
+}
+
+function showResult(){
+  state = 'result';
+  const total = stageScores[0] + stageScores[1];
+  $('resultDetail').innerHTML = `ステージ1: ${stageScores[0]}てん<br>ステージ2: ${stageScores[1]}てん`;
+  $('resultTotal').textContent = `ごうけい ${total} てん`;
+  $('resultStars').textContent = total >= 180 ? '★★★' : total >= 120 ? '★★☆' : total >= 60 ? '★☆☆' : 'つぎは がんばろう!';
+  showPanel('resultPanel');
+}
+
+$('startBtn').addEventListener('click', () => { initAudio(); startStage(0); });
+$('nextBtn').addEventListener('click', () => {
+  if (currentStage === 0) startStage(1); else showResult();
+});
+$('againBtn').addEventListener('click', () => { stageScores[0]=stageScores[1]=0; startStage(0); });
+$('restartBtn').addEventListener('click', () => {
+  if (state==='title' || state==='result') return;
+  initAudio(); startStage(currentStage);
+});
+
+// ============================================================
+//  自機の姿勢反映・カメラ
+// ============================================================
+function forwardVec(){
+  return new THREE.Vector3(
+    -Math.cos(pitch)*Math.sin(yaw),
+     Math.sin(pitch),
+    -Math.cos(pitch)*Math.cos(yaw)
+  );
+}
+function applyPlaneTransform(){
+  plane.rotation.set(pitch, yaw, bank);
+}
+function updateCamera(dt, tight){
+  const fwd = forwardVec();
+  const fh = new THREE.Vector3(fwd.x, 0, fwd.z).normalize();
+  if (fh.lengthSq() < 0.01) fh.set(0,0,-1);
+  const dist = tight ? 9 : 12;
+  const target = plane.position.clone().addScaledVector(fh, -dist).add(new THREE.Vector3(0, tight?3.5:4.5, 0));
+  const k = 1 - Math.pow(0.0012, dt);
+  camera.position.lerp(target, k);
+  if (camShake > 0){
+    camera.position.x += (Math.random()-0.5)*camShake;
+    camera.position.y += (Math.random()-0.5)*camShake;
+    camShake = Math.max(0, camShake - dt*1.4);
+  }
+  const look = plane.position.clone().addScaledVector(fwd, 8);
+  camera.lookAt(look);
+
+  const targetFov = THREE.MathUtils.clamp(60 + Math.max(0, speed-18)*0.55, 60, 84);
+  camFov += (targetFov - camFov) * Math.min(1, 4*dt);
+  camera.fov = camFov;
+  camera.updateProjectionMatrix();
+}
+
+// ============================================================
+//  更新処理
+// ============================================================
+function updateSlide(dt){
+  // ジャンプ台をエネルギー保存で加速しながら滑走
+  const y0 = rampCurve.getPointAt(0).y;
+  const p = rampCurve.getPointAt(Math.min(slideS/rampLen, 1));
+  slideV = Math.max(4, Math.sqrt(Math.max(0, 2*9.8*(y0 - p.y))) * 0.86);
+  slideS += slideV * dt;
+
+  if (slideS >= rampLen){ launch(); return; }
+
+  const u = slideS/rampLen;
+  const pos = rampCurve.getPointAt(u);
+  const t = rampCurve.getTangentAt(u);
+  plane.position.copy(pos).add(new THREE.Vector3(0, 1.1, 0));
+  yaw = Math.atan2(-t.x, -t.z);
+  pitch = Math.asin(THREE.MathUtils.clamp(t.y, -1, 1));
+  bank = 0;
+  speed = slideV;
+  applyPlaneTransform();
+  updateCamera(dt, true);
+  if (windGain) windGain.gain.value = Math.min(0.16, slideV/60*0.4);
+}
+
+function updateFly(dt){
+  const c = getControl();
+
+  // バンク → 旋回
+  const bankTarget = -c.x * 0.95;
+  bank += (bankTarget - bank) * Math.min(1, 6*dt);
+  const turnRate = -bank * 1.15 * Math.min(1, speed/16);
+  yaw += turnRate * dt;
+
+  // ピッチ(失速時は自動で機首下げ)
+  let pitchTarget = c.y * 0.55;
+  if (speed < STALL) pitchTarget -= (STALL - speed) * 0.055;
+  pitch += (pitchTarget - pitch) * Math.min(1, 3.5*dt);
+  pitch = THREE.MathUtils.clamp(pitch, -1.15, 0.95);
+
+  // 速度:降下で加速、上昇・ブレーキ・旋回で減速
+  let acc = -Math.sin(pitch) * 14
+            - 0.006 * speed * speed
+            - Math.abs(bank) * speed * 0.03;
+  if (c.brk) acc -= 5 + speed * 0.12;
+  speed = THREE.MathUtils.clamp(speed + acc*dt, 3, 62);
+
+  // 沈下(グライダーは常に少し沈む。遅いほど大きく)
+  let sink = 1.3 + Math.max(0, STALL - speed) * 0.55;
+  if (c.brk) sink += 1.2;
+
+  // 速度ベクトル = 前進 + 沈下 + 風ドリフト
+  const fwd = forwardVec();
+  lastVel.copy(fwd).multiplyScalar(speed);
+  lastVel.y -= sink;
+  if (stageWind) lastVel.addScaledVector(stageWind.v, WIND_SPEED);
+
+  plane.position.addScaledVector(lastVel, dt);
+  applyPlaneTransform();
+
+  // 翼端トレイル
+  plane.updateMatrixWorld(true);
+  trailL.push(plane.localToWorld(new THREE.Vector3(-2.6, 0.15, 0)));
+  trailR.push(plane.localToWorld(new THREE.Vector3( 2.6, 0.15, 0)));
+
+  // スピードライン
+  const slOpacity = THREE.MathUtils.clamp((speed - 20)/28, 0, 1) * 0.55;
+  speedLineMat.opacity = slOpacity;
+  const dir = lastVel.clone().normalize();
+  for (const m of speedLines){
+    if (!m.visible || m.position.clone().sub(plane.position).dot(dir) < -12) {
+      respawnSpeedLine(m, dir);
+      m.visible = slOpacity > 0.03;
+    }
+  }
+
+  updateCamera(dt, false);
+
+  // 風切り音
+  if (windGain){
+    windGain.gain.value += (Math.min(0.3, speed/62*0.34) - windGain.gain.value) * Math.min(1, 5*dt);
+    windFilter.frequency.value = 250 + speed*22;
+  }
+
+  // 接地判定 → cannon-es に引き継ぎ
+  if (plane.position.y <= 0.95){
+    plane.position.y = 0.95;
+    beginLanding();
+  }
+}
+
+function updateLanded(dt){
+  landedTimer += dt;
+  world.step(1/120, dt, 10);
+  plane.position.set(planeBody.position.x, planeBody.position.y, planeBody.position.z);
+
+  const v = planeBody.velocity;
+  const hlen = Math.hypot(v.x, v.z);
+  if (hlen > 0.6) yaw = Math.atan2(-v.x, -v.z);
+  pitch += (THREE.MathUtils.clamp(Math.atan2(v.y, Math.max(hlen, 0.1)) * 0.5, -0.6, 0.6) - pitch) * Math.min(1, 5*dt);
+  bank += (0 - bank) * Math.min(1, 4*dt);
+  speed = Math.hypot(v.x, v.y, v.z);
+  applyPlaneTransform();
+  updateCamera(dt, false);
+  if (windGain) windGain.gain.value *= (1 - Math.min(1, 2*dt));
+
+  // 静止判定(0.5秒つづけて低速なら確定)
+  if (speed < 1.3 && planeBody.position.y < 1.5){
+    settleTimer += dt;
+    if (settleTimer > 0.5){ finishStage(); return; }
+  } else settleTimer = 0;
+  if (landedTimer > 9) finishStage(); // 保険
+}
+
+function updatePetals(dt, time){
+  if (!stageWind) return;
+  const wv = stageWind.v;
+  for (const p of petals){
+    if (!p.visible) continue;
+    p.position.x += (wv.x * WIND_SPEED + Math.sin(time*2 + p.userData.ph)*1.2) * dt;
+    p.position.z += (wv.z * WIND_SPEED + Math.cos(time*1.7 + p.userData.ph)*1.2) * dt;
+    p.position.y -= (1.0 + Math.sin(time*3 + p.userData.ph)*0.4) * dt;
+    p.rotation.x += p.userData.rx * dt;
+    p.rotation.y += p.userData.ry * dt;
+    if (p.position.y < 0 || p.position.distanceTo(plane.position) > 70){
+      // 風上側から再登場
+      p.position.copy(plane.position)
+        .addScaledVector(wv, -(25 + Math.random()*35))
+        .add(new THREE.Vector3((Math.random()-0.5)*50, 5 + Math.random()*28, (Math.random()-0.5)*50));
+    }
+  }
+}
+
+function updateDust(dt){
+  for (const d of dusts){
+    if (!d.visible) continue;
+    d.userData.life -= dt;
+    if (d.userData.life <= 0){ d.visible = false; continue; }
+    d.userData.v.y -= 12*dt;
+    d.position.addScaledVector(d.userData.v, dt);
+    if (d.position.y < 0.2) d.position.y = 0.2;
+    d.material.opacity = d.userData.life * 0.85;
+    d.lookAt(camera.position);
+  }
+}
+
+// ============================================================
+//  メインループ(delta-time 正規化:120Hz iPad 対応)
+// ============================================================
+const clock = new THREE.Clock();
+let elapsed = 0;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05); // タブ復帰時の暴走防止
+  elapsed += dt;
+
+  switch (state){
+    case 'intro':
+      stateTimer += dt;
+      updateCamera(dt, true);
+      if (stateTimer > (stageWind ? 3.4 : 1.8)) startLights();
+      break;
+    case 'lights':
+      updateCamera(dt, true);
+      break;
+    case 'slide':  updateSlide(dt); break;
+    case 'fly':    updateFly(dt);   break;
+    case 'landed': updateLanded(dt); break;
+    default:
+      updateCamera(dt, false);
+  }
+
+  updatePetals(dt, elapsed);
+  updateDust(dt);
+
+  // 丸影
+  blobShadow.position.set(plane.position.x, 0.05, plane.position.z);
+  const alt = Math.max(0, plane.position.y - 1);
+  blobShadow.material.opacity = THREE.MathUtils.clamp(0.35 - alt*0.0035, 0.04, 0.35);
+  const ss = 1.6 + alt*0.02;
+  blobShadow.scale.set(ss, ss, 1);
+
+  // 旗を風になびかせる
+  const flap = Math.sin(elapsed*6)*0.2;
+  for (const f of flagMeshes) f.rotation.y = flap + (stageWind ? Math.atan2(stageWind.v.x, stageWind.v.z) : 0)*0.3;
+
+  // HUD
+  if (state==='slide' || state==='fly' || state==='landed'){
+    const distToTarget = Math.hypot(plane.position.x - TARGET_POS.x, plane.position.z - TARGET_POS.z);
+    hud.innerHTML = `はやさ ${(speed*3.6).toFixed(0)} km/h<br>たかさ ${Math.max(0, plane.position.y-1).toFixed(0)} m<br>まとまで ${distToTarget.toFixed(0)} m`;
+  } else if (state==='intro' || state==='lights'){
+    hud.innerHTML = stageWind ? `かぜ: ${stageWind.jp}から` : 'かぜ: なし';
+  }
+
+  renderer.render(scene, camera);
+}
+
+showPanel('titlePanel');
+showMsg('', '');
+animate();
+</script>
+</body>
+</html>
